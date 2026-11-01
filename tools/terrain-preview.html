@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>月面近景 · 几何校验</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      color: #eee;
+      font:
+        13px system-ui,
+        sans-serif;
+    }
+    canvas {
+      display: block;
+    }
+    .toolbar {
+      position: fixed;
+      top: 18px;
+      left: 20px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 14px;
+      background: #111d;
+      border: 1px solid #555;
+      border-radius: 8px;
+    }
+    button {
+      background: #292929;
+      color: #eee;
+      border: 1px solid #666;
+      border-radius: 4px;
+      padding: 7px 11px;
+      cursor: pointer;
+    }
+    button[aria-pressed='true'] {
+      background: #ddd;
+      color: #111;
+    }
+    #metrics {
+      position: fixed;
+      bottom: 18px;
+      left: 22px;
+      color: #ddd;
+      text-shadow: 0 1px 3px #000;
+    }
+    #loading {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: #111;
+    }
+  </style>
+  <div class="toolbar">
+    <span>近景形状校验</span><button id="gray" aria-pressed="true">灰模</button
+    ><button id="soil" aria-pressed="false">月壤</button><button id="low">低视角</button
+    ><button id="overview">俯视</button><button id="close">碎石近看</button><button id="pit">小坑近看</button
+    ><button id="boulder">大石头近看</button><button id="colliders" aria-pressed="false">岩石碰撞</button
+    ><button id="gravel" aria-pressed="true">碎石</button><button id="wire" aria-pressed="false">网格</button>
+  </div>
+  <div id="metrics"></div>
+  <div id="loading">正在生成近景地形…</div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { LunarTerrain, heightAt } from '../src/terrain/terrain.js';
+    import { LUNAR_PALETTE, makeLunarMaterials } from '../src/rendering/surface.js';
+    import { createLunarSunlight } from '../src/environment/lighting.js';
+    import { addGravelLodShader } from '../src/terrain/gravel.js';
+    import { addRockLodShader } from '../src/terrain/rocks.js';
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.22;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.domElement.setAttribute('aria-label', '近景地形校验');
+    document.body.prepend(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x010102);
+    const camera = new THREE.PerspectiveCamera(59, innerWidth / innerHeight, 0.04, 14500);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    const groundHeight = heightAt(0, 0);
+    const light = createLunarSunlight(renderer.capabilities.maxTextureSize);
+    scene.add(light, new THREE.HemisphereLight(LUNAR_PALETTE.skyFill, LUNAR_PALETTE.groundFill, 0.65));
+    const gravelFocus = { value: new THREE.Vector2() };
+    const lunar = makeLunarMaterials(undefined, gravelFocus);
+    const lunarGravel = [lunar.gravel, lunar.gravelMid, lunar.gravelFar];
+    const lunarRocks = [lunar.rock, lunar.rockMid, lunar.rockFar];
+    const gray = new THREE.MeshStandardMaterial({ color: 0x8d8d8d, roughness: 1, metalness: 0 });
+    const grayRock = new THREE.MeshStandardMaterial({ color: 0x696969, roughness: 1, metalness: 0 });
+    const grayGravel = [0, 1, 2].map((level) => addGravelLodShader(grayRock.clone(), gravelFocus, level));
+    const grayRocks = [0, 1, 2].map((level) => addRockLodShader(grayRock.clone(), gravelFocus, level));
+    const terrain = new LunarTerrain(scene, gray, grayRocks, grayGravel, gravelFocus);
+    terrain.update(0, 0, 0, 0, true);
+    let soilMode = false,
+      rockColliders = [],
+      focusX = 0,
+      focusZ = 0;
+
+    /** 更新必要状态并重绘当前预览视角。 */
+    const draw = () => renderer.render(scene, camera);
+
+    /** 切换预览相机的近景或整体观察位置。 */
+    function pose(low) {
+      controls.target.set(-4, groundHeight + (low ? 0.05 : -0.3), -11);
+      camera.position.set(5, groundHeight + (low ? 0.9 : 3.8), 7);
+      controls.update();
+      draw();
+    }
+    pose(false);
+    controls.addEventListener('change', draw);
+
+    /** 切换灰模与月壤材质，保持相同视角供对比。 */
+    function mode(soil) {
+      soilMode = soil;
+      for (const mesh of terrain.tiles.values()) mesh.material = soil ? lunar.ground : gray;
+      terrain.horizon.material = soil ? lunar.ground : gray;
+      for (const mesh of terrain.rockMeshes) mesh.material = (soil ? lunarRocks : grayRocks)[mesh.userData.level];
+      for (const mesh of terrain.gravel) mesh.material = (soil ? lunarGravel : grayGravel)[mesh.userData.level];
+      document.getElementById('gray').setAttribute('aria-pressed', String(!soil));
+      document.getElementById('soil').setAttribute('aria-pressed', String(soil));
+      draw();
+    }
+    document.getElementById('gray').onclick = () => mode(false);
+    document.getElementById('soil').onclick = () => mode(true);
+    document.getElementById('low').onclick = () => pose(true);
+    document.getElementById('overview').onclick = () => pose(false);
+    document.getElementById('close').onclick = () => {
+      const y = terrain.surfaceHeightAt(5, 7);
+      camera.position.set(5, y + 0.85, 7);
+      controls.target.set(3.3, terrain.surfaceHeightAt(3.3, 4.5), 4.5);
+      controls.update();
+      draw();
+    };
+    document.getElementById('pit').onclick = () => {
+      const x = -7.25,
+        z = 6.75;
+      camera.position.set(x + 2.3, terrain.surfaceHeightAt(x + 2.3, z + 2.6) + 1.1, z + 2.6);
+      controls.target.set(x, terrain.surfaceHeightAt(x, z), z);
+      controls.update();
+      draw();
+    };
+    document.getElementById('boulder').onclick = () => {
+      const rock = terrain.rockPlacement.items
+        .filter((item) => item.variant === 0)
+        .sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
+      focusX = rock.x;
+      focusZ = rock.z;
+      terrain.update(focusX, focusZ, 0, 0);
+      const height = terrain.surfaceHeightAt(rock.x, rock.z);
+      camera.position.set(rock.x - rock.scale * 2.3, height + rock.scale * 1.2, rock.z - rock.scale * 2.6);
+      controls.target.set(rock.x, height + rock.scale * 0.3, rock.z);
+      for (const mesh of rockColliders) scene.remove(mesh);
+      rockColliders = [...terrain.nearbyColliders(focusX, focusZ)]
+        .filter(([key]) => key.startsWith('rock:'))
+        .map(([, mesh]) => mesh);
+      if (document.getElementById('colliders').getAttribute('aria-pressed') === 'true')
+        for (const mesh of rockColliders) scene.add(mesh);
+      mode(soilMode);
+      controls.update();
+      draw();
+    };
+    document.getElementById('colliders').onclick = (event) => {
+      const visible = event.currentTarget.getAttribute('aria-pressed') !== 'true';
+      if (!rockColliders.length)
+        rockColliders = [...terrain.nearbyColliders(focusX, focusZ)]
+          .filter(([key]) => key.startsWith('rock:'))
+          .map(([, mesh]) => mesh);
+      for (const mesh of rockColliders)
+        if (visible) scene.add(mesh);
+        else scene.remove(mesh);
+      event.currentTarget.setAttribute('aria-pressed', String(visible));
+      draw();
+    };
+    document.getElementById('gravel').onclick = (event) => {
+      const visible = !terrain.gravel[0].visible;
+      for (const mesh of terrain.gravel) mesh.visible = visible;
+      terrain.gravelShadows.visible = visible;
+      event.currentTarget.setAttribute('aria-pressed', String(visible));
+      draw();
+    };
+    document.getElementById('wire').onclick = (event) => {
+      gray.wireframe = !gray.wireframe;
+      lunar.ground.wireframe = gray.wireframe;
+      event.currentTarget.setAttribute('aria-pressed', String(gray.wireframe));
+      draw();
+    };
+    const counts = [0, 1, 2].map((level) =>
+      terrain.gravel.filter((mesh) => mesh.userData.level === level).reduce((n, mesh) => n + mesh.count, 0),
+    );
+    document.getElementById('metrics').textContent =
+      `脚边网格 0.25 m · ${terrain.gravelVisibleCount.toLocaleString()} 颗碎石 · 近/中/远 LOD ${counts.join(' / ')}（含过渡） · 拖动观察 / 滚轮缩放`;
+    await renderer.compileAsync(scene, camera);
+    document.getElementById('loading').remove();
+    draw();
+    window.addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      draw();
+    });
+  </script>
+</html>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1,viewport-fit=cover" />
+    <title>Lunar Walk</title>
+    <script>
+      document.documentElement.lang = /^zh\b/i.test(navigator.language) ? 'zh-CN' : 'en';
+      if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent))
+        document.documentElement.classList.add('is-mobile');
+    </script>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/ui/styles.css" />
+  </head>
+  <body>
+    <div
+      id="loading"
+      class="loading"
+      role="progressbar"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow="0"
+      aria-label="Loading"
+    >
+      <div class="loading-mark">
+        <p class="loading-title">Lunar Walk</p>
+        <div class="loading-track"><div id="loading-bar" class="loading-bar"></div></div>
+      </div>
+    </div>
+    <div class="hud">
+      <div class="brand">
+        <a
+          class="github"
+          href="https://github.com/hh-hang/lunar-walk"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="GitHub"
+          ><svg viewBox="0 0 16 16" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.7 7.7 0 0 1 8 3.87c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"
+            /></svg
+        ></a>
+      </div>
+      <div id="board-hint" class="board">
+        <span class="board-key">F</span><span class="zh">上车</span><span class="en">Board</span>
+      </div>
+      <div id="control-hint" class="bottom">
+        <span class="on-foot"
+          ><span class="hint-line"
+            ><span class="hint" data-hint="move"
+              ><span class="zh">WASD 漫步</span><span class="en">WASD Walk</span></span
+            ><span class="hint" data-hint="shift"
+              ><span class="zh">SHIFT 奔跑</span><span class="en">SHIFT Run</span></span
+            ><span class="hint" data-hint="space"
+              ><span class="zh">SPACE 跳跃</span><span class="en">SPACE Jump</span></span
+            ></span
+          ><span class="hint-line"
+            ><span class="hint" data-hint="look"
+              ><span class="zh">鼠标 旋转视角</span><span class="en">Mouse Look</span></span
+            ><span class="hint" data-hint="zoom"
+              ><span class="zh">滚轮 缩放</span><span class="en">Wheel Zoom</span></span
+            ><span class="hint" data-hint="view"
+              ><span class="zh">V 切换视角</span><span class="en">V View</span></span
+            ></span
+          ></span
+        ><span class="driving"
+          ><span class="hint-line"
+            ><span class="hint" data-hint="move"
+              ><span class="zh">WASD 驾驶</span><span class="en">WASD Drive</span></span
+            ><span class="hint" data-hint="shift"
+              ><span class="zh">SHIFT 手刹</span><span class="en">SHIFT Handbrake</span></span
+            ><span class="hint" data-hint="space"
+              ><span class="zh">SPACE 刹车</span><span class="en">SPACE Brake</span></span
+            ></span
+          ><span class="hint-line"
+            ><span class="hint" data-hint="look"
+              ><span class="zh">鼠标 旋转视角</span><span class="en">Mouse Look</span></span
+            ><span class="hint" data-hint="zoom"
+              ><span class="zh">滚轮 缩放</span><span class="en">Wheel Zoom</span></span
+            ><span class="hint" data-hint="view"
+              ><span class="zh">V 切换视角</span><span class="en">V View</span></span
+            ></span
+          ></span
+        >
+      </div>
+      <p class="credit">
+        <a
+          href="https://sketchfab.com/3d-models/tripo-astronaut-2-stylized-and-animated-fe594ac4364942e8abad34744e507038"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Tripo Astronaut 2</a
+        >
+        · Jungle Jim ·
+        <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a
+        ><br /><a
+          href="https://sketchfab.com/3d-models/apollo-lunar-module-e7458d5b149b482d9829ff90ea6bc233"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Apollo Lunar Module</a
+        >
+        · jgut028 ·
+        <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener noreferrer"
+          >CC BY-NC 4.0</a
+        ><br /><a
+          href="https://sketchfab.com/3d-models/mondfahrzeug-lunar-rover-acb3f8645a69493cb211a62b40d66aab"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Mondfahrzeug</a
+        >
+        · Deutsches Museum | Digital ·
+        <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer"
+          >CC BY-SA 4.0</a
+        >
+      </p>
+    </div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

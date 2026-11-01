@@ -1,0 +1,34 @@
+{
+  "utc": "2026-10-18T08:56:18.000Z",
+  "site": {
+    "name": "Lunar near side 60N 30E",
+    "latitude": 60,
+    "longitude": 30,
+    "heightKm": 0
+  },
+  "axes": {
+    "x": "east",
+    "y": "up",
+    "z": "south"
+  },
+  "source": "NASA/JPL Horizons DE441",
+  "bodies": {
+    "sun": {
+      "azimuth": 116.417825054,
+      "altitude": 12.938900475,
+      "illuminatedFraction": 1,
+      "angularDiameterDegrees": 0.5349188888888889,
+      "distanceKm": 149035034.39070025,
+      "direction": [0.8728342388416805, 0.22391187020523118, 0.4336171881819954]
+    },
+    "earth": {
+      "azimuth": 217.39325737,
+      "altitude": 28.568746997,
+      "illuminatedFraction": 0.5292899,
+      "angularDiameterDegrees": 1.8159911111111111,
+      "distanceKm": 402486.1393858208,
+      "direction": [-0.5333420515366668, 0.47821287530543205, 0.6977526079885125],
+      "sunDirection": [0.8741394862964431, 0.22258599964293915, 0.4316661108546097]
+    }
+  }
+}

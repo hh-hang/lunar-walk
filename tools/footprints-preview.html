@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>月面脚印 · GPU 校验</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    body {
+      margin: 0;
+      background: #080809;
+      color: #eee;
+      font: 13px system-ui;
+    }
+    canvas {
+      display: block;
+    }
+    .tools {
+      position: fixed;
+      top: 16px;
+      left: 18px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 10px;
+      background: #151519ed;
+      border: 1px solid #555;
+      border-radius: 8px;
+    }
+    button {
+      padding: 7px 10px;
+      background: #333;
+      color: #eee;
+      border: 1px solid #777;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button[aria-pressed='true'] {
+      background: #ddd;
+      color: #111;
+    }
+    #status {
+      position: fixed;
+      left: 20px;
+      bottom: 18px;
+      background: #111d;
+      padding: 10px;
+      white-space: pre-line;
+    }
+  </style>
+  <div class="tools">
+    <b>月壤压痕</b><button id="show" aria-pressed="true">脚印</button><button id="close">近看</button
+    ><button id="trail">足迹</button><button id="rebase">原点平移</button><button id="return">离开后返回</button
+    ><button id="verify">GPU 校验</button><button id="bench">性能对比</button
+    ><button id="stress">5000 枚压力测试</button><button id="clear">清空</button>
+  </div>
+  <div id="status">正在准备…</div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { createPatchGeometry, heightAt } from '../src/terrain/terrain.js';
+    import { makeLunarMaterials, LUNAR_PALETTE } from '../src/rendering/surface.js';
+    import { createLunarSunlight } from '../src/environment/lighting.js';
+    import { LunarFootprints } from '../src/rendering/footprints.js';
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.22;
+    document.body.prepend(renderer.domElement);
+    renderer.domElement.setAttribute('aria-label', '脚印渲染校验');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x080809);
+    scene.add(createLunarSunlight(), new THREE.HemisphereLight(LUNAR_PALETTE.skyFill, LUNAR_PALETTE.groundFill, 0.65));
+    const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.01, 100);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    const origin = { value: new THREE.Vector2() },
+      materials = makeLunarMaterials(origin),
+      patch = createPatchGeometry(-12, -12, 24, 96);
+    const ground = new THREE.Mesh(patch.geometry, materials.ground);
+    ground.position.set(-12, 0, -12);
+    scene.add(ground);
+    const prints = new LunarFootprints(renderer, scene, materials.ground);
+    await prints.prepare();
+    const status = document.getElementById('status');
+    let shift = 0;
+
+    /** 在指定世界位置生成带朝向的左右脚印。 */
+    function stamp(x, z, side = 'left', angle = 0) {
+      const a = { x: Math.cos(angle) * 0.035, z: Math.sin(angle) * 0.035 },
+        b = { x: -Math.sin(angle) * 0.075, z: Math.cos(angle) * 0.075 };
+      const corners = [
+        [-1, -1],
+        [1, -1],
+        [-1, 1],
+        [1, 1],
+      ].map(([u, v]) => new THREE.Vector3(x + a.x * u + b.x * v, heightAt(x, z), z + a.z * u + b.z * v));
+      prints.add({ side, point: new THREE.Vector3(x, heightAt(x, z), z), normal: new THREE.Vector3(0, 1, 0), corners });
+    }
+
+    /** 显示脚印图集、绘制批次与 CPU 提交耗时。 */
+    function metrics(extra = '') {
+      status.textContent = `${prints.stats.count} 枚脚印 · ${prints.stats.tiles} 个活动块 · R8 高度图 ${prints.stats.gpuMiB} MiB · 本次盖印 ${prints.stats.draws} 批 · CPU ${prints.stats.bakeMs.toFixed(2)} ms${extra ? '\n' + extra : ''}`;
+    }
+
+    /** 更新必要状态并重绘当前预览视角。 */
+    function draw() {
+      prints.update(0, 0, shift, 0);
+      renderer.render(scene, camera);
+    }
+
+    /** 切换预览相机的近景或整体观察位置。 */
+    function pose(close) {
+      const y = heightAt(0, 0);
+      camera.position.set((close ? 0.12 : 0.65) - shift, y + (close ? 0.33 : 1.05), close ? 0.36 : 1.3);
+      controls.target.set(-shift, y, -(close ? 0 : 0.55));
+      controls.update();
+      draw();
+    }
+    for (let i = 0; i < 8; i++) stamp(i % 2 ? 0.08 : -0.08, -i * 0.23, i % 2 ? 'right' : 'left');
+    pose(false);
+    metrics();
+    controls.addEventListener('change', draw);
+    document.getElementById('show').onclick = (e) => {
+      prints.setEnabled(!prints.enabled);
+      e.currentTarget.setAttribute('aria-pressed', String(prints.enabled));
+      draw();
+    };
+    document.getElementById('close').onclick = () => pose(true);
+    document.getElementById('trail').onclick = () => pose(false);
+    document.getElementById('rebase').onclick = () => {
+      const delta = shift ? -3072 : 3072;
+      shift += delta;
+      ground.position.x -= delta;
+      camera.position.x -= delta;
+      controls.target.x -= delta;
+      origin.value.x = shift;
+      draw();
+      metrics(`原点偏移 ${shift} · 使用同一份世界坐标脚印`);
+    };
+    document.getElementById('return').onclick = () => {
+      prints.update(40, 40, shift, 0);
+      draw();
+      metrics('已离开活动窗口并返回，脚印纹理由历史记录重建');
+    };
+    document.getElementById('clear').onclick = () => {
+      prints.clear();
+      draw();
+      metrics();
+    };
+    document.getElementById('stress').onclick = () => {
+      prints.clear();
+      for (let i = 0; i < 5000; i++) {
+        const angle = i * 2.399963;
+        const radius = Math.sqrt((i + 0.5) / 5000) * 7;
+        stamp(Math.cos(angle) * radius, Math.sin(angle) * radius, i % 2 ? 'right' : 'left', angle);
+      }
+      draw();
+      metrics('5000 枚记录，显存保持固定');
+    };
+    const probeTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+    const probeScene = new THREE.Scene(),
+      probeCamera = new THREE.Camera();
+    const probeMaterial = new THREE.ShaderMaterial({
+      uniforms: { map: { value: prints.target.texture }, at: { value: new THREE.Vector2() } },
+      depthTest: false,
+      depthWrite: false,
+      vertexShader: 'void main(){gl_Position=vec4(position.xy,0.,1.);}',
+      fragmentShader:
+        'uniform sampler2D map;uniform vec2 at;void main(){float d=texture2D(map,at).r;gl_FragColor=vec4(d,d,d,1.);}',
+    });
+    probeScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), probeMaterial));
+
+    /** 读取指定世界位置的印记高度，用于 GPU 结果校验。 */
+    function probe(x, z) {
+      /** 将负坐标映射为正的循环图集索引。 */
+      const mod = (x, n) => ((x % n) + n) % n;
+      const tx = Math.floor(x / 8),
+        tz = Math.floor(z / 8);
+      probeMaterial.uniforms.at.value.set((mod(tx, 3) + (x / 8 - tx)) / 3, (mod(tz, 3) + (z / 8 - tz)) / 3);
+      renderer.setRenderTarget(probeTarget);
+      renderer.render(probeScene, probeCamera);
+      const data = new Uint8Array(4);
+      renderer.readRenderTargetPixels(probeTarget, 0, 0, 1, 1, data);
+      renderer.setRenderTarget(null);
+      return data[0];
+    }
+    document.getElementById('verify').onclick = () => {
+      prints.clear();
+      stamp(0, 0);
+      stamp(-8, -8, 'right');
+      draw();
+      const before = probe(0, 0),
+        edge = probe(-8, -8),
+        outside = probe(2, 2);
+      const dx = shift ? 0 : 3072;
+      prints.update(0, 0, dx, 0);
+      const rebased = probe(0, 0);
+      prints.update(40, 40, dx, 0);
+      prints.update(0, 0, dx, 0);
+      const returned = probe(0, 0);
+      draw();
+      metrics(
+        `${before > 0 && edge > 0 && outside === 0 && before === rebased && before === returned ? '通过' : '失败'} · 盖印 ${before}/255 · 负坐标跨块 ${edge}/255 · 外侧 ${outside} · 原点平移 ${rebased} · 返回重建 ${returned}`,
+      );
+    };
+
+    /** 等待下一显示帧，分散预热并采样性能。 */
+    const frame = () => new Promise(requestAnimationFrame);
+    document.getElementById('bench').onclick = async (e) => {
+      const button = e.currentTarget;
+      button.disabled = true;
+      status.textContent = '正在比较同一画面的开关耗时…';
+      const gl = renderer.getContext(),
+        ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+      const results = [];
+      for (const enabled of [false, true]) {
+        prints.setEnabled(enabled);
+        for (let i = 0; i < 3; i++) {
+          await frame();
+          renderer.render(scene, camera);
+        }
+        const cpu = [],
+          queries = [];
+        for (let i = 0; i < 24; i++) {
+          await frame();
+          const query = ext ? gl.createQuery() : null;
+          if (query) gl.beginQuery(ext.TIME_ELAPSED_EXT, query);
+          const start = performance.now();
+          renderer.render(scene, camera);
+          cpu.push(performance.now() - start);
+          if (query) {
+            gl.endQuery(ext.TIME_ELAPSED_EXT);
+            queries.push(query);
+          }
+        }
+        let gpu = null;
+        if (ext) {
+          for (let i = 0; i < 120 && !gl.getQueryParameter(queries.at(-1), gl.QUERY_RESULT_AVAILABLE); i++)
+            await frame();
+          if (gl.getQueryParameter(queries.at(-1), gl.QUERY_RESULT_AVAILABLE) && !gl.getParameter(ext.GPU_DISJOINT_EXT))
+            gpu = queries.reduce((sum, q) => sum + gl.getQueryParameter(q, gl.QUERY_RESULT), 0) / queries.length / 1e6;
+          for (const q of queries) gl.deleteQuery(q);
+        }
+        cpu.sort((a, b) => a - b);
+        results.push(
+          `${enabled ? '开启' : '关闭'}：CPU 提交 ${cpu[12].toFixed(3)} ms${gpu === null ? ' · GPU 计时不可用' : ` · GPU ${gpu.toFixed(3)} ms`}`,
+        );
+      }
+      prints.setEnabled(true);
+      document.getElementById('show').setAttribute('aria-pressed', 'true');
+      draw();
+      metrics(results.join('\n'));
+      button.disabled = false;
+    };
+    window.addEventListener('resize', () => {
+      renderer.setSize(innerWidth, innerHeight);
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      draw();
+    });
+  </script>
+</html>
